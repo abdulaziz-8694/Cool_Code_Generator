@@ -361,6 +361,13 @@ static void emit_gc_check(char *source, ostream &s)
   s << JAL << "_gc_check" << endl;
 }
 
+/*Pop the top of stack and store it the destination register*/
+static void emit_pop(char *dest, ostream &s)
+{
+	emit_load(dest,0,SP,s);
+	emit_addiu(SP,SP,4,s);
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -966,7 +973,7 @@ void CgenClassTable::emit_attributes(CgenNodeP cur_class)
   {
     str<<WORD;
     Symbol type = (attr_list.find(ordered_attr[i].first)->second).first;
-    if(cgen_debug) cout<<cur_class->get_name()<<"\t"<<type<<endl;
+    //if(cgen_debug) cout<<cur_class->get_name()<<"\t"<<type<<endl;
     if(type == Int){
       IntEntry *e = inttable.lookup_string("0");
       e->code_ref(str);
@@ -1003,6 +1010,49 @@ void CgenClassTable::code_class_protObj()
     emit_attributes(ordered_class[i]); 
   }
 }
+
+
+void CgenClassTable::code_init_classes()
+{
+	for(unsigned i = 0;i<ordered_class.size();i++)
+	{
+		CgenNodeP cur_class = ordered_class[i];
+		Symbol classname = cur_class->get_name();
+		str<<classname<<CLASSINIT_SUFFIX<<LABEL;
+		emit_push(FP,str);
+		emit_push(SELF,str);
+		emit_push(RA,str);
+		emit_addiu(FP,SP,4,str);
+		emit_move(SELF,ACC,str);
+		
+		//Initializing parent classes
+		if(classname!=Object)
+		{
+			str << JAL <<cur_class->get_parentnd()->get_name()->get_string()<< CLASSINIT_SUFFIX <<endl;
+		}
+
+		Features fs = cur_class->features;
+		for(int i = fs->first(); fs->more(i); i= fs->next(i))
+		{
+		//Code generation for init expressions
+			attr_class *attribute = dynamic_cast<attr_class *>(fs->nth(i));
+			if(attribute!=NULL){
+				Expression assigned = attribute->init;
+				if(assigned->get_type()!=NULL)
+				{
+					assigned->code(str);
+					int off =(attrTable.find(classname)->second).find(attribute->name)->second.second;
+					emit_store(ACC,3+off,SELF,str);
+				}
+			}
+
+		}
+		emit_pop(RA,str);
+		emit_pop(SELF,str);
+		emit_pop(FP,str);
+		emit_return(str);
+	}	
+}
 /*Modified Code ends Here*/
 
 
@@ -1024,16 +1074,16 @@ void CgenClassTable::code()
 //
 /*Modified code starts Here*/  
   if(cgen_debug) cout << "Coding class_nameTab" << endl;
-    code_class_nameTab();
+  code_class_nameTab();
 
   if(cgen_debug) cout << "Coding Object Table" << endl;
-    code_class_obj();
+  code_class_obj();
 
   if(cgen_debug) cout << "Coding Disptach table" <<endl;
-    code_dispatchTable();
+  code_dispatchTable();
 
   if (cgen_debug) cout << "Coding Prototype Objects" << endl;
-    code_class_protObj();
+  code_class_protObj();
 /*Modified code ends here*/
 
   if (cgen_debug) cout << "coding global text" << endl;
@@ -1044,6 +1094,8 @@ void CgenClassTable::code()
 //                   - object initializer
 //                   - the class methods
 //                   - etc...
+  if(cgen_debug) cout << "Coding Init for each Classes" << endl;
+  code_init_classes();
 
 }
 

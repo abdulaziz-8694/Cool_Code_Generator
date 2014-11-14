@@ -46,6 +46,7 @@ private:
    void code_class_protObj();
    void populate_attrTable(CgenNodeP,CgenNodeP);
    void emit_attributes(CgenNodeP);
+   void code_init_classes();
    /*Modified Code Ends Here*/
 // The following creates an inheritance graph from
 // a list of classes.  The graph is implemented as
