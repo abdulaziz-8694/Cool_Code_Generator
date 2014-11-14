@@ -889,7 +889,7 @@ void CgenClassTable::populate_dispachTable(CgenNodeP node, CgenNodeP cur_class)
       }
       else  //Overriding methods
       {
-        ((dispatchTable.find(cur_class->get_name())->second).find(method->name)->second).first = cur_class->get_name();
+        ((dispatchTable.find(cur_class->get_name())->second).find(method->name)->second).first = node->get_name();
       }
     }
   }
