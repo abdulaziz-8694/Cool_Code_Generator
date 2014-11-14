@@ -1055,6 +1055,37 @@ void CgenClassTable::code_init_classes()
 }
 /*Modified Code ends Here*/
 
+void CgenClassTable::emit_methods()
+{
+	for(unsigned i = 0; i<ordered_class.size();i++)
+	{
+		Features fs = ordered_class[i]->features;
+		for(int j = fs->first(); fs->more(j); j = fs->next(j))
+		{
+			method_class * method = dynamic_cast<method_class *>(fs->nth(j));
+			if(method!=NULL)
+			{
+
+				Expression body = method->expr;
+				int count = 0;
+				Formals formals = method->formals;
+				for(int k = formals->first();formals->more(k);k=formals->next(k))
+					count++;
+				str<< ordered_class[i]->get_name() << METHOD_SEP << method->name << LABEL;
+				emit_push(FP,str);
+				emit_push(SELF,str);
+				emit_push(RA,str);
+				emit_addiu(FP,SP,4,str);
+				emit_move(SELF,ACC,str);
+				body->code(str);						//emit code for the body expression
+				emit_pop(RA,str);
+				emit_pop(SELF,str);
+				emit_pop(FP,str);
+				emit_addiu(SP,SP,count*4,str);
+			}
+		}
+	}
+}
 
 void CgenClassTable::code()
 {
@@ -1096,7 +1127,9 @@ void CgenClassTable::code()
 //                   - etc...
   if(cgen_debug) cout << "Coding Init for each Classes" << endl;
   code_init_classes();
-
+  
+  if(cgen_debug) cout << "Coding Methods for each classes" << endl;
+  emit_methods();
 }
 
 
