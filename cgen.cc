@@ -135,6 +135,8 @@ BoolConst truebool(TRUE);
 */
 std::map<Symbol,std::map<Symbol,std::pair<Symbol,int> > > dispatchTable;
 std::map<Symbol,std::map<Symbol,std::pair<Symbol,int> > > attrTable;
+Symbol cur_classname;
+unsigned label_count = 0;
 /*Modified Code Ends Here*/
 void program_class::cgen(ostream &os) 
 {
@@ -364,7 +366,7 @@ static void emit_gc_check(char *source, ostream &s)
 /*Pop the top of stack and store it the destination register*/
 static void emit_pop(char *dest, ostream &s)
 {
-	emit_load(dest,0,SP,s);
+	emit_load(dest,1,SP,s);
 	emit_addiu(SP,SP,4,s);
 }
 
@@ -889,7 +891,7 @@ void CgenClassTable::populate_dispachTable(CgenNodeP node, CgenNodeP cur_class)
       }
       else  //Overriding methods
       {
-        ((dispatchTable.find(cur_class->get_name())->second).find(method->name)->second).first = cur_class->get_name();
+        ((dispatchTable.find(cur_class->get_name())->second).find(method->name)->second).first = node->get_name();
       }
     }
   }
@@ -1018,13 +1020,13 @@ void CgenClassTable::code_init_classes()
 	{
 		CgenNodeP cur_class = ordered_class[i];
 		Symbol classname = cur_class->get_name();
+		cur_classname = classname;
 		str<<classname<<CLASSINIT_SUFFIX<<LABEL;
-		emit_push(FP,str);
-		emit_push(SELF,str);
-		emit_push(RA,str);
-		emit_addiu(FP,SP,4,str);
-		emit_move(SELF,ACC,str);
-		
+	  emit_push(FP, str);
+	  emit_push(SELF, str);
+	  emit_push(RA, str);
+ 	 	emit_addiu(FP,SP,4,str); // set $fp to a new position
+  	emit_move(SELF,ACC,str);
 		//Initializing parent classes
 		if(classname!=Object)
 		{
@@ -1047,10 +1049,15 @@ void CgenClassTable::code_init_classes()
 			}
 
 		}
-		emit_pop(RA,str);
-		emit_pop(SELF,str);
-		emit_pop(FP,str);
-		emit_return(str);
+		emit_move(ACC,SELF,str);
+	  emit_pop(RA,str);
+	  emit_pop(SELF,str);
+	  emit_pop(FP,str);
+	  //emit_load(FP,3,SP,str);
+	  //emit_load(SELF,2,SP,str);
+	  //emit_load(RA,1,SP,str);
+	  //emit_addiu(SP,SP,12,str);
+	  emit_return(str);	
 	}	
 }
 /*Modified Code ends Here*/
@@ -1059,29 +1066,35 @@ void CgenClassTable::emit_methods()
 {
 	for(unsigned i = 0; i<ordered_class.size();i++)
 	{
-		Features fs = ordered_class[i]->features;
-		for(int j = fs->first(); fs->more(j); j = fs->next(j))
-		{
-			method_class * method = dynamic_cast<method_class *>(fs->nth(j));
-			if(method!=NULL)
-			{
 
-				Expression body = method->expr;
-				int count = 0;
-				Formals formals = method->formals;
-				for(int k = formals->first();formals->more(k);k=formals->next(k))
-					count++;
-				str<< ordered_class[i]->get_name() << METHOD_SEP << method->name << LABEL;
-				emit_push(FP,str);
-				emit_push(SELF,str);
-				emit_push(RA,str);
-				emit_addiu(FP,SP,4,str);
-				emit_move(SELF,ACC,str);
-				body->code(str);						//emit code for the body expression
-				emit_pop(RA,str);
-				emit_pop(SELF,str);
-				emit_pop(FP,str);
-				emit_addiu(SP,SP,count*4,str);
+		cur_classname = ordered_class[i]->get_name();
+		if(cur_classname!=Object && cur_classname!=Str && cur_classname!=IO){
+			Features fs = ordered_class[i]->features;
+			for(int j = fs->first(); fs->more(j); j = fs->next(j))
+			{
+				method_class * method = dynamic_cast<method_class *>(fs->nth(j));
+				if(method!=NULL)
+				{
+
+					Expression body = method->expr;
+					int count = 0;
+					Formals formals = method->formals;
+					for(int k = formals->first();formals->more(k);k=formals->next(k))
+						count++;
+					str<< ordered_class[i]->get_name() << METHOD_SEP << method->name << LABEL;
+					emit_addiu(SP,SP,-12,str);
+		      emit_store(FP,3,SP,str);
+		      emit_store(SELF,2,SP,str);
+		      emit_store(RA,1,SP,str);
+		      emit_addiu(FP,SP,4,str);
+		      emit_move(SELF,ACC,str);
+					body->code(str);						//emit code for the body expression
+					emit_load(FP,3,SP,str);
+		      emit_load(SELF,2,SP,str);
+		      emit_load(RA,1,SP,str);
+		      emit_addiu(SP,SP,count* 4 + 12,str); // number of arguments + 12
+		      emit_return(str);
+				}
 			}
 		}
 	}
@@ -1184,24 +1197,50 @@ void typcase_class::code(ostream &s) {
 }
 
 void block_class::code(ostream &s) {
+	for(int i = body->first(); body->more(i); i = body->next(i))
+	{
+		body->nth(i)->code(s);
+	}
 }
 
 void let_class::code(ostream &s) {
 }
 
 void plus_class::code(ostream &s) {
+	e1->code(s);
+  emit_push(ACC,s);
+	e2->code(s);
+	emit_pop(T1,s);
+	emit_add(ACC,ACC,T1,s);
 }
 
 void sub_class::code(ostream &s) {
+	e1->code(s);
+  emit_push(ACC,s);
+	e2->code(s);
+  emit_pop(T1,s);
+	emit_sub(ACC,ACC,T1,s);	
 }
 
 void mul_class::code(ostream &s) {
+	e1->code(s);
+  emit_push(ACC,s);
+	e2->code(s);
+  emit_pop(T1,s);
+  emit_mul(ACC,ACC,T1,s);
 }
 
 void divide_class::code(ostream &s) {
+	e1->code(s);
+  emit_push(ACC,s);
+	e2->code(s);
+  emit_pop(T1,s);
+	emit_div(ACC,ACC,T1,s);
 }
 
 void neg_class::code(ostream &s) {
+	e1->code(s);
+  emit_neg(ACC,ACC,s);	
 }
 
 void lt_class::code(ostream &s) {
@@ -1214,6 +1253,9 @@ void leq_class::code(ostream &s) {
 }
 
 void comp_class::code(ostream &s) {
+  e1->code(s);
+  emit_load_imm(T1,1,s);
+  emit_sub(ACC,T1,ACC,s);
 }
 
 void int_const_class::code(ostream& s)  
@@ -1238,6 +1280,17 @@ void new__class::code(ostream &s) {
 }
 
 void isvoid_class::code(ostream &s) {
+  int truelabel = label_count;
+  label_count++;
+  int falselabel = label_count;
+  label_count++;
+  e1->code(s);
+  emit_beqz(ACC,truelabel,s);
+  emit_load_bool(ACC,falsebool,s);
+  emit_branch(falselabel,s);
+  emit_label_def(truelabel,s);
+  emit_load_bool(ACC,truebool,s);
+  emit_label_def(falselabel,s);
 }
 
 void no_expr_class::code(ostream &s) {
