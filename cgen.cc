@@ -370,8 +370,8 @@ static void emit_gc_check(char *source, ostream &s)
 /*Pop the top of stack and store it the destination register*/
 static void emit_pop(char *dest, ostream &s)
 {
-	emit_load(dest,1,SP,s);
-	emit_addiu(SP,SP,4,s);
+  emit_load(dest,1,SP,s);
+  emit_addiu(SP,SP,4,s);
 }
 
 
@@ -1035,104 +1035,104 @@ void CgenClassTable::code_class_protObj()
 
 void CgenClassTable::code_init_classes()
 {
-	for(unsigned i = 0;i<ordered_class.size();i++)
-	{
-		CgenNodeP cur_class = ordered_class[i];
-		Symbol classname = cur_class->get_name();
-		cur_classname = classname;
-		str<<classname<<CLASSINIT_SUFFIX<<LABEL;
+  for(unsigned i = 0;i<ordered_class.size();i++)
+  {
+    CgenNodeP cur_class = ordered_class[i];
+    Symbol classname = cur_class->get_name();
+    cur_classname = classname;
+    str<<classname<<CLASSINIT_SUFFIX<<LABEL;
 
     //Emmiting code for initializing the activation record
-	  emit_push(FP, str);    //Pushing Frame pointer
-	  emit_push(SELF, str);   //Pushing the self pointer
-	  emit_push(RA, str);      //Pushing the return address
- 	 	emit_addiu(FP,SP,4,str); // set $fp to a new position
-  	emit_move(SELF,ACC,str); 
-		//Initializing parent classes
-		if(classname!=Object)
-		{
-			str << JAL <<cur_class->get_parentnd()->get_name()->get_string()<< CLASSINIT_SUFFIX <<endl;
-		}
+    emit_push(FP, str);    //Pushing Frame pointer
+    emit_push(SELF, str);   //Pushing the self pointer
+    emit_push(RA, str);      //Pushing the return address
+    emit_addiu(FP,SP,4,str); // set $fp to a new position
+    emit_move(SELF,ACC,str); 
+    //Initializing parent classes
+    if(classname!=Object)
+    {
+      str << JAL <<cur_class->get_parentnd()->get_name()->get_string()<< CLASSINIT_SUFFIX <<endl;
+    }
 
-		Features fs = cur_class->features;
-		for(int i = fs->first(); fs->more(i); i= fs->next(i))
-		{
-		  //Code generation for init expressions
-			attr_class *attribute = dynamic_cast<attr_class *>(fs->nth(i));
-			if(attribute!=NULL){
-				Expression assigned = attribute->init;
-				if(assigned->get_type()!=NULL)
-				{
-					assigned->code(str);
-					int off =(attrTable.find(classname)->second).find(attribute->name)->second.second;
-					emit_store(ACC,3+off,SELF,str);
-				}
-			}
+    Features fs = cur_class->features;
+    for(int i = fs->first(); fs->more(i); i= fs->next(i))
+    {
+      //Code generation for init expressions
+      attr_class *attribute = dynamic_cast<attr_class *>(fs->nth(i));
+      if(attribute!=NULL){
+        Expression assigned = attribute->init;
+        if(assigned->get_type()!=NULL)
+        {
+          assigned->code(str);
+          int off =(attrTable.find(classname)->second).find(attribute->name)->second.second;
+          emit_store(ACC,3+off,SELF,str);
+        }
+      }
 
-		}
-		emit_move(ACC,SELF,str);
-	  emit_pop(RA,str);
-	  emit_pop(SELF,str);
-	  emit_pop(FP,str);
-	  //emit_load(FP,3,SP,str);
-	  //emit_load(SELF,2,SP,str);
-	  //emit_load(RA,1,SP,str);
-	  //emit_addiu(SP,SP,12,str);
-	  emit_return(str);	
-	}	
+    }
+    emit_move(ACC,SELF,str);
+    emit_pop(RA,str);
+    emit_pop(SELF,str);
+    emit_pop(FP,str);
+    //emit_load(FP,3,SP,str);
+    //emit_load(SELF,2,SP,str);
+    //emit_load(RA,1,SP,str);
+    //emit_addiu(SP,SP,12,str);
+    emit_return(str); 
+  } 
 }
 
 //Emmitting code for each methods for every classes except the Basic classes
 void CgenClassTable::emit_methods()
 {
-	for(unsigned i = 0; i<ordered_class.size();i++)
-	{
+  for(unsigned i = 0; i<ordered_class.size();i++)
+  {
 
-		cur_classname = ordered_class[i]->get_name();
-		if(cur_classname!=Object && cur_classname!=Str && cur_classname!=IO){
-			Features fs = ordered_class[i]->features;
-			for(int j = fs->first(); fs->more(j); j = fs->next(j))
-			{
-				method_class * method = dynamic_cast<method_class *>(fs->nth(j));
-				if(method!=NULL)
-				{
+    cur_classname = ordered_class[i]->get_name();
+    if(cur_classname!=Object && cur_classname!=Str && cur_classname!=IO){
+      Features fs = ordered_class[i]->features;
+      for(int j = fs->first(); fs->more(j); j = fs->next(j))
+      {
+        method_class * method = dynamic_cast<method_class *>(fs->nth(j));
+        if(method!=NULL)
+        {
 
-					Expression body = method->expr;
-					int count = 0;
-					Formals formals = method->formals;
+          Expression body = method->expr;
+          int count = 0;
+          Formals formals = method->formals;
 
           formalScope.clear();
           //Storing the offsets from the frame pointer of the formals for use in method body. 
-					for(int k = formals->first();formals->more(k);k=formals->next(k)){
+          for(int k = formals->first();formals->more(k);k=formals->next(k)){
             //if(cgen_debug) cout<<k<<endl;
             formal_class *formal = dynamic_cast<formal_class *>(formals->nth(k));
             if(formal!=NULL){
-					 	  formalScope.push_back(formal->name);
+              formalScope.push_back(formal->name);
               count++;
             }
           }
 
-					str<< ordered_class[i]->get_name() << METHOD_SEP << method->name << LABEL;
-					//Initializing frame pointer and storing  previous frame pointer and return address 
+          str<< ordered_class[i]->get_name() << METHOD_SEP << method->name << LABEL;
+          //Initializing frame pointer and storing  previous frame pointer and return address 
           emit_addiu(SP,SP,-12,str);
-		      emit_store(FP,3,SP,str);
-		      emit_store(SELF,2,SP,str);
-		      emit_store(RA,1,SP,str);
-		      emit_addiu(FP,SP,4,str);
-		      emit_move(SELF,ACC,str);
+          emit_store(FP,3,SP,str);
+          emit_store(SELF,2,SP,str);
+          emit_store(RA,1,SP,str);
+          emit_addiu(FP,SP,4,str);
+          emit_move(SELF,ACC,str);
 
-					body->code(str);						//emit code for the body expression
-					
+          body->code(str);            //emit code for the body expression
+          
           //Poping frame pointer and return address and self pointer
           emit_load(FP,3,SP,str);
-		      emit_load(SELF,2,SP,str);
-		      emit_load(RA,1,SP,str);
-		      emit_addiu(SP,SP,count* 4 + 12,str); // number of arguments + 12
-		      emit_return(str);
-				}
-			}
-		}
-	}
+          emit_load(SELF,2,SP,str);
+          emit_load(RA,1,SP,str);
+          emit_addiu(SP,SP,count* 4 + 12,str); // number of arguments + 12
+          emit_return(str);
+        }
+      }
+    }
+  }
 }
 
 void CgenClassTable::code()
@@ -1354,19 +1354,19 @@ void cond_class::code(ostream &s) {
 }
 
 void loop_class::code(ostream &s) {
-	int truelabel = label_count;
-	label_count++;
-	int falselabel = label_count;
-	label_count++;
+  int truelabel = label_count;
+  label_count++;
+  int falselabel = label_count;
+  label_count++;
 
   //True branch
-	emit_label_def(truelabel,s);
-	pred->code(s);
+  emit_label_def(truelabel,s);
+  pred->code(s);
   emit_load(T1,3,ACC,s);
-	emit_beqz(T1,falselabel,s);  //Exit the while loop if false
-	body->code(s);
-	emit_branch(truelabel,s);    //Continue the while loop
-	
+  emit_beqz(T1,falselabel,s);  //Exit the while loop if false
+  body->code(s);
+  emit_branch(truelabel,s);    //Continue the while loop
+  
   emit_label_def(falselabel,s);
   emit_move(ACC,ZERO,s);      //Put the value zero to the accumulator as the evaluted value is always zero
 }
@@ -1376,10 +1376,10 @@ void typcase_class::code(ostream &s) {
 
 void block_class::code(ostream &s) {
   //Code each expression
-	for(int i = body->first(); body->more(i); i = body->next(i))
-	{
-		body->nth(i)->code(s);
-	}
+  for(int i = body->first(); body->more(i); i = body->next(i))
+  {
+    body->nth(i)->code(s);
+  }
 }
 
 void let_class::code(ostream &s) {
@@ -1399,7 +1399,7 @@ void let_class::code(ostream &s) {
   else
   {
     //Else code the initialization expression
-  	if(cgen_debug) cout<<"Let has an assignment" <<endl;
+    if(cgen_debug) cout<<"Let has an assignment" <<endl;
     init->code(s);
   }
 
@@ -1419,13 +1419,13 @@ The following is the logic for all the binary arithmetic operators
 4. Do the corresponding operation
 */
 void plus_class::code(ostream &s) {
-	e1->code(s); 
+  e1->code(s); 
   letScope.push_back(No_type);
   emit_push(ACC,s);  
-	e2->code(s);       
+  e2->code(s);       
   emit_fetch_int(T2,ACC,s); 
   emit_jal("Object.copy",s);
-	emit_pop(T1,s);        
+  emit_pop(T1,s);        
   emit_fetch_int(T1,T1,s);
   emit_add(T1,T1,T2,s);
   emit_store_int(T1,ACC,s);
@@ -1433,7 +1433,7 @@ void plus_class::code(ostream &s) {
 }
 
 void sub_class::code(ostream &s) {
-	e1->code(s);
+  e1->code(s);
   letScope.push_back(No_type);
   emit_push(ACC,s);
   e2->code(s);
@@ -1442,12 +1442,12 @@ void sub_class::code(ostream &s) {
   emit_pop(T1,s);
   emit_fetch_int(T1,T1,s);
   emit_sub(T1,T1,T2,s);
-  emit_store_int(T1,ACC,s);	
+  emit_store_int(T1,ACC,s); 
   letScope.pop_back();
 }
 
 void mul_class::code(ostream &s) {
-	e1->code(s);
+  e1->code(s);
   letScope.push_back(No_type);
   emit_push(ACC,s);
   e2->code(s);
@@ -1461,7 +1461,7 @@ void mul_class::code(ostream &s) {
 }
 
 void divide_class::code(ostream &s) {
-	e1->code(s);
+  e1->code(s);
   letScope.push_back(No_type);
   emit_push(ACC,s);
   e2->code(s);
@@ -1478,15 +1478,15 @@ void divide_class::code(ostream &s) {
 //Allocate some space from the heap for the new object
 //And negate the value of the register and put it back in the correct loaction
 void neg_class::code(ostream &s) {
-	e1->code(s);
-	emit_push(ACC,s);
-	letScope.push_back(No_type);
+  e1->code(s);
+  emit_push(ACC,s);
+  letScope.push_back(No_type);
   emit_jal("Object.copy",s);
   emit_pop(T2,s);
   letScope.pop_back();
   emit_fetch_int(T2,T2,s);
   emit_neg(T2,T2,s);
-  emit_store_int(T2,ACC,s);	
+  emit_store_int(T2,ACC,s); 
 }
 
 /*The follwoing is the login for less than and less than equal to expressions
@@ -1658,7 +1658,7 @@ void object_class::code(ostream &s) {
       if(formalScope[i] == name)
       {
         off = formalScope.size()-i-1;
-        emit_load(ACC,off,FP,s);
+        emit_load(ACC,off+3,FP,s);
         return;
       }
     }
