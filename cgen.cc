@@ -139,7 +139,7 @@ std::map<Symbol,std::map<Symbol,std::pair<Symbol,int> > > attrTable;
 Symbol cur_classname;
 unsigned label_count = 0;
 std::vector<Symbol> letScope;
-std::map<Symbol,int> formalScope;
+std::vector<Symbol> formalScope;
 /*Modified Code Ends Here*/
 
 void program_class::cgen(ostream &os) 
@@ -1083,8 +1083,16 @@ void CgenClassTable::emit_methods()
 					Expression body = method->expr;
 					int count = 0;
 					Formals formals = method->formals;
-					for(int k = formals->first();formals->more(k);k=formals->next(k))
-						count++;
+
+          formalScope.clear();
+					for(int k = formals->first();formals->more(k);k=formals->next(k)){
+            formal_class *formal = dynamic_cast<formal_class *>(formals->nth(k));
+            if(formal!=NULL){
+					 	  formalScope.push_back(formal->name);
+              count++;
+            }
+          }
+
 					str<< ordered_class[i]->get_name() << METHOD_SEP << method->name << LABEL;
 					emit_addiu(SP,SP,-12,str);
 		      emit_store(FP,3,SP,str);
@@ -1192,6 +1200,18 @@ void assign_class::code(ostream &s) {
       {
         off = letScope.size()-i;
         emit_store(ACC,off,SP,s);
+        return;
+      }
+    }
+  }
+  if(formalScope.size()!=0)
+  {
+    for(unsigned i = 0;i<formalScope.size();i++)
+    {
+      if(formalScope[i]==name)
+      {
+        off = i;
+        emit_store(ACC,off,FP,s);
         return;
       }
     }
@@ -1523,6 +1543,20 @@ void object_class::code(ostream &s) {
       }
     }
   }
+
+  if(formalScope.size()!=0)
+  {
+    for(unsigned i =0; i<formalScope.size();i++)
+    {
+      if(formalScope[i] == name)
+      {
+        off = i;
+        emit_load(ACC,off,FP,s);
+        return;
+      }
+    }
+  }
+
   off = (attrTable.find(cur_classname)->second).find(name)->second.second;
   emit_load(ACC,off+3,SELF,s);
 }
