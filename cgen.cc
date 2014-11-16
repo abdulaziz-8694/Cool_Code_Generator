@@ -1179,15 +1179,22 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 //*****************************************************************
 
 void assign_class::code(ostream &s) {
+
 }
 
 void static_dispatch_class::code(ostream &s) {
   int num_of_actuals = 0;
   int not_void = label_count;
   int offset;
-  char *dispAddress = type_name->get_string();
+  
+  Symbol class_type = type_name;
+  if(class_type==SELF_TYPE)
+    class_type = cur_classname;
+
+  char *dispAddress = class_type->get_string();
   strcat(dispAddress,"_dispTab");
   label_count++;
+
   for(int i=actual->first();actual->more(i);i=actual->next(i))
   {
     num_of_actuals++;
@@ -1202,7 +1209,7 @@ void static_dispatch_class::code(ostream &s) {
 
   emit_label_def(not_void,s);
   emit_load_address(T1,dispAddress,s);
-  offset = (dispatchTable.find(type_name)->second).find(name)->second.second;
+  offset = (dispatchTable.find(class_type)->second).find(name)->second.second;
   emit_load(T1,offset,T1,s);
   emit_jalr(T1,s);
 
@@ -1239,9 +1246,32 @@ void dispatch_class::code(ostream &s) {
 }
 
 void cond_class::code(ostream &s) {
+  int truelabel = label_count;
+  label_count++;
+  int falselabel = label_count++;
+  pred->code(s);
+  emit_fetch_int(T1,ACC,s);
+  emit_beqz(T1,falselabel,s);
+  then_exp->code(s);
+  emit_branch(truelabel,s);
+  emit_label_def(falselabel,s);
+  else_exp->code(s);
+  emit_label_def(truelabel,s);
 }
 
 void loop_class::code(ostream &s) {
+	int truelabel = label_count;
+	label_count++;
+	int falselabel = label_count;
+	label_count++;
+	emit_label_def(truelabel,s);
+	pred->code(s);
+	emit_load(T1,3,ACC,s);
+	emit_beqz(T1,falselabel,s);
+	body->code(s);
+	emit_branch(truelabel,s);
+	emit_label_def(falselabel,s);
+  emit_move(ACC,ZERO,s);
 }
 
 void typcase_class::code(ostream &s) {
@@ -1418,6 +1448,6 @@ void object_class::code(ostream &s) {
     emit_move(ACC,SELF,s);
     return;
   }
-  int offset = (dispatchTable.find(cur_classname)->second).find(name)->second.second;
+  int offset = (attrTable.find(cur_classname)->second).find(name)->second.second;
   emit_load(ACC,offset+3,SELF,s);
 }
