@@ -130,6 +130,7 @@ BoolConst truebool(TRUE);
 // generator.
 //
 //*********************************************************
+
 /*Modified Code Starts Here
   Method Table and attribute Table to get the offset and name of feature.
 */
@@ -137,7 +138,10 @@ std::map<Symbol,std::map<Symbol,std::pair<Symbol,int> > > dispatchTable;
 std::map<Symbol,std::map<Symbol,std::pair<Symbol,int> > > attrTable;
 Symbol cur_classname;
 unsigned label_count = 0;
+std::vector<Symbol> letScope;
+std::map<Symbol,int> formalScope;
 /*Modified Code Ends Here*/
+
 void program_class::cgen(ostream &os) 
 {
   // spim wants comments to start with '#'
@@ -1179,14 +1183,29 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 //*****************************************************************
 
 void assign_class::code(ostream &s) {
+  int off;
+  expr->code(s);
+  if(letScope.size()!=0){
+    for(int i = letScope.size()-1;i>=0;i--)
+    {
+      if(letScope[i]==name)
+      {
+        off = letScope.size()-i;
+        emit_store(ACC,off,SP,s);
+        return;
+      }
+    }
+  }
 
+  off = (attrTable.find(cur_classname)->second).find(name)->second.second;
+  emit_store(ACC,off+3,SELF,s);
 }
 
 void static_dispatch_class::code(ostream &s) {
   int num_of_actuals = 0;
   int not_void = label_count;
   int offset;
-  
+
   Symbol class_type = type_name;
   if(class_type==SELF_TYPE)
     class_type = cur_classname;
@@ -1199,6 +1218,7 @@ void static_dispatch_class::code(ostream &s) {
   {
     num_of_actuals++;
     actual->nth(i)->code(s);
+    letScope.push_back(No_type);
     emit_push(ACC,s);
   }
   expr->code(s);
@@ -1212,6 +1232,9 @@ void static_dispatch_class::code(ostream &s) {
   offset = (dispatchTable.find(class_type)->second).find(name)->second.second;
   emit_load(T1,offset,T1,s);
   emit_jalr(T1,s);
+
+  for(int i = 0; i<num_of_actuals;i++)
+    letScope.pop_back();
 
 
 
@@ -1229,6 +1252,7 @@ void dispatch_class::code(ostream &s) {
   {
     num_of_actuals++;
     actual->nth(i)->code(s);
+    letScope.push_back(No_type);
     emit_push(ACC,s);
   }
   expr->code(s);
@@ -1243,6 +1267,8 @@ void dispatch_class::code(ostream &s) {
   emit_load(T1,offset,T1,s);
   emit_jalr(T1,s);
 
+  for(int i = 0; i<num_of_actuals;i++)
+    letScope.pop_back();
 }
 
 void cond_class::code(ostream &s) {
@@ -1285,10 +1311,33 @@ void block_class::code(ostream &s) {
 }
 
 void let_class::code(ostream &s) {
+  if(init->get_type()==NULL)
+  {
+    if(type_decl == Int)
+      emit_load_int(ACC,inttable.lookup_string("0"),s);
+    else if(type_decl == Bool)
+      emit_load_bool(ACC,BoolConst(false),s);
+    else if(type_decl == Str)
+      emit_load_string(ACC,stringtable.lookup_string(""),s);
+    else
+      emit_load_imm(ACC,0,s);
+  }
+  else
+  {
+    init->code(s);
+  }
+  letScope.push_back(identifier);
+  emit_push(ACC,s);
+  body->code(s);
+  emit_addiu(SP,SP,4,s);
+  letScope.pop_back();
+
+
 }
 
 void plus_class::code(ostream &s) {
 	e1->code(s);
+  letScope.push_back(No_type);
   emit_push(ACC,s);
 	e2->code(s);
   emit_fetch_int(T2,ACC,s);
@@ -1297,10 +1346,12 @@ void plus_class::code(ostream &s) {
   emit_fetch_int(T1,T1,s);
   emit_add(T1,T1,T2,s);
   emit_store_int(T1,ACC,s);
+  letScope.pop_back();
 }
 
 void sub_class::code(ostream &s) {
 	e1->code(s);
+  letScope.push_back(No_type);
   emit_push(ACC,s);
   e2->code(s);
   emit_fetch_int(T2,ACC,s);
@@ -1309,10 +1360,12 @@ void sub_class::code(ostream &s) {
   emit_fetch_int(T1,T1,s);
   emit_sub(T1,T1,T2,s);
   emit_store_int(T1,ACC,s);	
+  letScope.pop_back();
 }
 
 void mul_class::code(ostream &s) {
 	e1->code(s);
+  letScope.push_back(No_type);
   emit_push(ACC,s);
   e2->code(s);
   emit_fetch_int(T2,ACC,s);
@@ -1321,10 +1374,12 @@ void mul_class::code(ostream &s) {
   emit_fetch_int(T1,T1,s);
   emit_mul(T1,T1,T2,s);
   emit_store_int(T1,ACC,s);
+  letScope.pop_back();
 }
 
 void divide_class::code(ostream &s) {
 	e1->code(s);
+  letScope.push_back(No_type);
   emit_push(ACC,s);
   e2->code(s);
   emit_fetch_int(T2,ACC,s);
@@ -1333,6 +1388,7 @@ void divide_class::code(ostream &s) {
   emit_fetch_int(T1,T1,s);
   emit_div(T1,T1,T2,s);
   emit_store_int(T1,ACC,s);
+  letScope.pop_back();
 }
 
 void neg_class::code(ostream &s) {
@@ -1346,9 +1402,11 @@ void lt_class::code(ostream &s) {
   int truelabel = label_count;
   label_count++;
   e1->code(s);
+  letScope.push_back(No_type);
   emit_push(ACC,s);
   e2->code(s);
   emit_pop(T1,s);
+  letScope.pop_back();
   emit_fetch_int(T1,T1,s);
   emit_fetch_int(T2,ACC,s);
   emit_load_bool(ACC,truebool,s);
@@ -1362,8 +1420,10 @@ void eq_class::code(ostream &s) {
   label_count++;
   e1->code(s);
   emit_push(ACC,s);
+  letScope.push_back(No_type);
   e2->code(s);
   emit_pop(T1,s);
+  letScope.pop_back();
   emit_move(T2,ACC,s);
   emit_load_bool(ACC,truebool,s);
   emit_beq(T2,T1,truelabel,s);
@@ -1382,9 +1442,11 @@ void leq_class::code(ostream &s) {
   int truelabel = label_count;
   label_count++;
   e1->code(s);
+  letScope.push_back(No_type);
   emit_push(ACC,s);
   e2->code(s);
   emit_pop(T1,s);
+  letScope.pop_back();
   emit_fetch_int(T1,T1,s);
   emit_fetch_int(T2,ACC,s);
   emit_load_bool(ACC,truebool,s);
@@ -1443,11 +1505,24 @@ void no_expr_class::code(ostream &s) {
 }
 
 void object_class::code(ostream &s) {
+  int off;
   if(name == self)
   {
     emit_move(ACC,SELF,s);
     return;
   }
-  int offset = (attrTable.find(cur_classname)->second).find(name)->second.second;
-  emit_load(ACC,offset+3,SELF,s);
+
+  if(letScope.size()!=0){
+    for(int i = letScope.size()-1;i>=0;i--)
+    {
+      if(letScope[i]==name)
+      {
+        off = letScope.size()-i;
+        emit_load(ACC,off,SP,s);
+        return;
+      }
+    }
+  }
+  off = (attrTable.find(cur_classname)->second).find(name)->second.second;
+  emit_load(ACC,off+3,SELF,s);
 }
