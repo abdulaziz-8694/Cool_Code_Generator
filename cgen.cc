@@ -1229,14 +1229,16 @@ void static_dispatch_class::code(ostream &s) {
   int num_of_actuals = 0;
   int not_void = label_count;
   int offset;
-
   Symbol class_type = type_name;
   if(class_type==SELF_TYPE)
     class_type = cur_classname;
 
-  char *dispAddress = class_type->get_string();
+  char *disp1 = class_type->get_string();
+  char dispAddress[500];
+  strcpy(dispAddress,disp1);
   strcat(dispAddress,"_dispTab");
   label_count++;
+
 
   for(int i=actual->first();actual->more(i);i=actual->next(i))
   {
@@ -1245,7 +1247,11 @@ void static_dispatch_class::code(ostream &s) {
     letScope.push_back(No_type);
     emit_push(ACC,s);
   }
+  
+
   expr->code(s);
+  
+
   emit_bne(ACC,ZERO,not_void,s);
   emit_load_address(ACC,"str_const0",s);
   emit_load_imm(T1,1,s);
@@ -1335,7 +1341,8 @@ void block_class::code(ostream &s) {
 }
 
 void let_class::code(ostream &s) {
-  if(init->get_type()==NULL)
+
+  if(init->get_type() == NULL)
   {
     if(type_decl == Int)
       emit_load_int(ACC,inttable.lookup_string("0"),s);
@@ -1348,6 +1355,7 @@ void let_class::code(ostream &s) {
   }
   else
   {
+  	if(cgen_debug) cout<<"Let has an assignment" <<endl;
     init->code(s);
   }
   letScope.push_back(identifier);
@@ -1417,10 +1425,14 @@ void divide_class::code(ostream &s) {
 
 void neg_class::code(ostream &s) {
 	e1->code(s);
-  emit_fetch_int(T1,ACC,s);
+	emit_push(ACC,s);
+	letScope.push_back(No_type);
   emit_jal("Object.copy",s);
-  emit_neg(T1,T1,s);
-  emit_store_int(T1,ACC,s);	
+  emit_pop(T2,s);
+  letScope.pop_back();
+  emit_fetch_int(T2,T2,s);
+  emit_neg(T2,T2,s);
+  emit_store_int(T2,ACC,s);	
 }
 
 void lt_class::code(ostream &s) {
@@ -1510,14 +1522,19 @@ void bool_const_class::code(ostream& s)
 }
 
 void new__class::code(ostream &s) {
+  if(type_name == SELF_TYPE){}
+  else{
   char *classname = type_name->get_string();
-  char *proto = strdup(classname);
-  char *init = strdup(classname);
+  char proto[500] = "";
+  char init[500] = "";
+  strcpy(proto,classname);
+  strcpy(init,classname);
   strcat(proto,PROTOBJ_SUFFIX);
   strcat(init,CLASSINIT_SUFFIX);
   emit_load_address(ACC,proto,s);
   emit_jal("Object.copy",s);
-  emit_jal(init,s);  
+  emit_jal(init,s);
+  }  
 }
 
 void isvoid_class::code(ostream &s) {
