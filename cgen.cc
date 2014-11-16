@@ -1182,9 +1182,60 @@ void assign_class::code(ostream &s) {
 }
 
 void static_dispatch_class::code(ostream &s) {
+  int num_of_actuals = 0;
+  int not_void = label_count;
+  int offset;
+  char *dispAddress = type_name->get_string();
+  strcat(dispAddress,"_dispTab");
+  label_count++;
+  for(int i=actual->first();actual->more(i);i=actual->next(i))
+  {
+    num_of_actuals++;
+    actual->nth(i)->code(s);
+    emit_push(ACC,s);
+  }
+  expr->code(s);
+  emit_bne(ACC,ZERO,not_void,s);
+  emit_load_address(ACC,"str_const0",s);
+  emit_load_imm(T1,1,s);
+  emit_jal("_dispatch_abort",s);
+
+  emit_label_def(not_void,s);
+  emit_load_address(T1,dispAddress,s);
+  offset = (dispatchTable.find(type_name)->second).find(name)->second.second;
+  emit_load(T1,offset,T1,s);
+  emit_jalr(T1,s);
+
+
+
 }
 
 void dispatch_class::code(ostream &s) {
+  int num_of_actuals = 0;
+  int not_void = label_count;
+  int offset;
+  Symbol expr_type = expr->get_type();
+  if(expr_type==SELF_TYPE)
+    expr_type = cur_classname;
+  label_count++;
+  for(int i=actual->first();actual->more(i);i=actual->next(i))
+  {
+    num_of_actuals++;
+    actual->nth(i)->code(s);
+    emit_push(ACC,s);
+  }
+  expr->code(s);
+  emit_bne(ACC,ZERO,not_void,s);
+  emit_load_address(ACC,"str_const0",s);
+  emit_load_imm(T1,1,s);
+  emit_jal("_dispatch_abort",s);
+
+  emit_label_def(not_void,s);
+  emit_load(T1,2,ACC,s);
+  offset = (dispatchTable.find(expr_type)->second).find(name)->second.second;
+  emit_load(T1,offset,T1,s);
+  emit_jalr(T1,s);
+
 }
 
 void cond_class::code(ostream &s) {
@@ -1210,52 +1261,117 @@ void plus_class::code(ostream &s) {
 	e1->code(s);
   emit_push(ACC,s);
 	e2->code(s);
+  emit_fetch_int(T2,ACC,s);
+  emit_jal("Object.copy",s);
 	emit_pop(T1,s);
-	emit_add(ACC,ACC,T1,s);
+  emit_fetch_int(T1,T1,s);
+  emit_add(T1,T1,T2,s);
+  emit_store_int(T1,ACC,s);
 }
 
 void sub_class::code(ostream &s) {
 	e1->code(s);
   emit_push(ACC,s);
-	e2->code(s);
+  e2->code(s);
+  emit_fetch_int(T2,ACC,s);
+  emit_jal("Object.copy",s);
   emit_pop(T1,s);
-	emit_sub(ACC,ACC,T1,s);	
+  emit_fetch_int(T1,T1,s);
+  emit_sub(T1,T1,T2,s);
+  emit_store_int(T1,ACC,s);	
 }
 
 void mul_class::code(ostream &s) {
 	e1->code(s);
   emit_push(ACC,s);
-	e2->code(s);
+  e2->code(s);
+  emit_fetch_int(T2,ACC,s);
+  emit_jal("Object.copy",s);
   emit_pop(T1,s);
-  emit_mul(ACC,ACC,T1,s);
+  emit_fetch_int(T1,T1,s);
+  emit_mul(T1,T1,T2,s);
+  emit_store_int(T1,ACC,s);
 }
 
 void divide_class::code(ostream &s) {
 	e1->code(s);
   emit_push(ACC,s);
-	e2->code(s);
+  e2->code(s);
+  emit_fetch_int(T2,ACC,s);
+  emit_jal("Object.copy",s);
   emit_pop(T1,s);
-	emit_div(ACC,ACC,T1,s);
+  emit_fetch_int(T1,T1,s);
+  emit_div(T1,T1,T2,s);
+  emit_store_int(T1,ACC,s);
 }
 
 void neg_class::code(ostream &s) {
 	e1->code(s);
-  emit_neg(ACC,ACC,s);	
+  emit_fetch_int(T1,ACC,s);
+  emit_neg(T1,T1,s);
+  emit_store_int(T1,ACC,s);	
 }
 
 void lt_class::code(ostream &s) {
+  int truelabel = label_count;
+  label_count++;
+  e1->code(s);
+  emit_push(ACC,s);
+  e2->code(s);
+  emit_pop(T1,s);
+  emit_fetch_int(T1,T1,s);
+  emit_fetch_int(T2,ACC,s);
+  emit_load_bool(ACC,truebool,s);
+  emit_blt(T1,T2,truelabel,s);
+  emit_load_bool(ACC,falsebool,s);
+  emit_label_def(truelabel,s);
 }
 
 void eq_class::code(ostream &s) {
+  int truelabel = label_count;
+  label_count++;
+  e1->code(s);
+  emit_push(ACC,s);
+  e2->code(s);
+  emit_pop(T1,s);
+  emit_move(T2,ACC,s);
+  emit_load_bool(ACC,truebool,s);
+  emit_beq(T2,T1,truelabel,s);
+  Symbol expr = e1->get_type();
+  if(expr == Int || expr == Bool || expr == Str )
+  {
+    emit_load_bool(ACC,truebool,s);
+    emit_load_bool(A1,falsebool,s);
+    emit_jal("equality_test",s);
+  }
+  emit_label_def(truelabel,s);
 }
 
+
 void leq_class::code(ostream &s) {
+  int truelabel = label_count;
+  label_count++;
+  e1->code(s);
+  emit_push(ACC,s);
+  e2->code(s);
+  emit_pop(T1,s);
+  emit_fetch_int(T1,T1,s);
+  emit_fetch_int(T2,ACC,s);
+  emit_load_bool(ACC,truebool,s);
+  emit_bleq(T1,T2,truelabel,s);
+  emit_load_bool(ACC,falsebool,s);
+  emit_label_def(truelabel,s);
 }
 
 void comp_class::code(ostream &s) {
+  int truelabel = label_count;
+  label_count++;
   e1->code(s);
-  emit_load_imm(T1,1,s);
-  emit_sub(ACC,T1,ACC,s);
+  emit_fetch_int(T1,ACC,s);
+  emit_load_bool(ACC,truebool,s);
+  emit_beqz(T1,truelabel,s);
+  emit_load_bool(ACC,falsebool,s);
+  emit_label_def(truelabel,s);
 }
 
 void int_const_class::code(ostream& s)  
@@ -1297,6 +1413,11 @@ void no_expr_class::code(ostream &s) {
 }
 
 void object_class::code(ostream &s) {
+  if(name == self)
+  {
+    emit_move(ACC,SELF,s);
+    return;
+  }
+  int offset = (dispatchTable.find(cur_classname)->second).find(name)->second.second;
+  emit_load(ACC,offset+3,SELF,s);
 }
-
-
