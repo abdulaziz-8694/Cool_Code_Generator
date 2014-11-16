@@ -1086,6 +1086,7 @@ void CgenClassTable::emit_methods()
 
           formalScope.clear();
 					for(int k = formals->first();formals->more(k);k=formals->next(k)){
+            if(cgen_debug) cout<<k<<endl;
             formal_class *formal = dynamic_cast<formal_class *>(formals->nth(k));
             if(formal!=NULL){
 					 	  formalScope.push_back(formal->name);
@@ -1198,6 +1199,8 @@ void assign_class::code(ostream &s) {
     {
       if(letScope[i]==name)
       {
+
+        if(cgen_debug) cout<<"Variable refrenced from Let\n";
         off = letScope.size()-i;
         emit_store(ACC,off,SP,s);
         return;
@@ -1210,8 +1213,9 @@ void assign_class::code(ostream &s) {
     {
       if(formalScope[i]==name)
       {
-        off = i;
-        emit_store(ACC,off,FP,s);
+        if(cgen_debug) cout<<"Variable refrenced from Formal Arguments\n";
+        off =formalScope.size() - i - 1;
+        emit_store(ACC,off+3,FP,s);
         return;
       }
     }
@@ -1537,6 +1541,7 @@ void object_class::code(ostream &s) {
     {
       if(letScope[i]==name)
       {
+        if(cgen_debug) cout<<"Variable refrenced from Let\n";
         off = letScope.size()-i;
         emit_load(ACC,off,SP,s);
         return;
@@ -1550,8 +1555,9 @@ void object_class::code(ostream &s) {
     {
       if(formalScope[i] == name)
       {
-        off = i;
-        emit_load(ACC,off,FP,s);
+        if(cgen_debug) cout<<"Variable refrenced from Formal Arguments\n";
+        off = formalScope.size()-i-1;
+        emit_load(ACC,off+3,FP,s);
         return;
       }
     }
@@ -1560,3 +1566,4 @@ void object_class::code(ostream &s) {
   off = (attrTable.find(cur_classname)->second).find(name)->second.second;
   emit_load(ACC,off+3,SELF,s);
 }
+
