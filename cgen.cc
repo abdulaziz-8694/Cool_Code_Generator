@@ -1418,6 +1418,7 @@ void divide_class::code(ostream &s) {
 void neg_class::code(ostream &s) {
 	e1->code(s);
   emit_fetch_int(T1,ACC,s);
+  emit_jal("Object.copy",s);
   emit_neg(T1,T1,s);
   emit_store_int(T1,ACC,s);	
 }
@@ -1509,6 +1510,14 @@ void bool_const_class::code(ostream& s)
 }
 
 void new__class::code(ostream &s) {
+  char *classname = type_name->get_string();
+  char *proto = strdup(classname);
+  char *init = strdup(classname);
+  strcat(proto,PROTOBJ_SUFFIX);
+  strcat(init,CLASSINIT_SUFFIX);
+  emit_load_address(ACC,proto,s);
+  emit_jal("Object.copy",s);
+  emit_jal(init,s);  
 }
 
 void isvoid_class::code(ostream &s) {
