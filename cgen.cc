@@ -134,12 +134,12 @@ BoolConst truebool(TRUE);
 /*Modified Code Starts Here
   Method Table and attribute Table to get the offset and name of feature.
 */
-std::map<Symbol,std::map<Symbol,std::pair<Symbol,int> > > dispatchTable;
-std::map<Symbol,std::map<Symbol,std::pair<Symbol,int> > > attrTable;
-Symbol cur_classname;
-unsigned label_count = 0;
-std::vector<Symbol> letScope;
-std::vector<Symbol> formalScope;
+std::map<Symbol,std::map<Symbol,std::pair<Symbol,int> > > dispatchTable;    //Dispatch table for every class
+std::map<Symbol,std::map<Symbol,std::pair<Symbol,int> > > attrTable;        //Attribue Table for every class
+Symbol cur_classname;                                                       //Current classname
+unsigned label_count = 0;                                                   // count of the label for branching
+std::vector<Symbol> letScope;                                               // For Handling Let Scopes
+std::vector<Symbol> formalScope;                                            // For Handling Formal Arguments Scope
 /*Modified Code Ends Here*/
 
 void program_class::cgen(ostream &os) 
@@ -850,6 +850,8 @@ void CgenNode::set_parentnd(CgenNodeP p)
 * Dispatch Tables for each classes and also   *
 * prototype object table for each class       *
 ***********************************************/
+
+//Coding class_nameTab for every class. Contains the name of each class
 void CgenClassTable::code_class_nameTab()
 {
   str << CLASSNAMETAB << LABEL;
@@ -864,6 +866,7 @@ void CgenClassTable::code_class_nameTab()
 
 }
 
+//Coding Object table for each class. Contains label for prototype Objects and Init methods
 void CgenClassTable::code_class_obj()
 {
   str << CLASSOBJTAB << LABEL;
@@ -873,14 +876,18 @@ void CgenClassTable::code_class_obj()
     str << WORD << (ordered_class[i])->get_name() << CLASSINIT_SUFFIX << endl; 
   }
 }
+
+
 /*Populating Dispatch Table Starting from ancestors to successors*/
 void CgenClassTable::populate_dispachTable(CgenNodeP node, CgenNodeP cur_class)
 {
+  //First populate methods from the parent then itself
   if(node->get_name()!=Object)
   {
     populate_dispachTable(node->get_parentnd(),cur_class);
   }
   
+
   Features f = node->features;
   for(int i = f->first();f->more(i);i = f->next(i))
   {
@@ -893,7 +900,7 @@ void CgenClassTable::populate_dispachTable(CgenNodeP node, CgenNodeP cur_class)
         int offset = dispatchTable.find(cur_class->get_name())->second.size();
         dispatchTable.find(cur_class->get_name())->second.insert(std::pair<Symbol,std::pair<Symbol,int> >(method->name,std::pair<Symbol,int>(node->get_name(),offset)));
       }
-      else  //Overriding methods
+      else  //Overriding methods in the current class
       {
         ((dispatchTable.find(cur_class->get_name())->second).find(method->name)->second).first = node->get_name();
       }
@@ -901,6 +908,7 @@ void CgenClassTable::populate_dispachTable(CgenNodeP node, CgenNodeP cur_class)
   }
 }
 
+//Compare function for two pairs based on the offset
 bool compare(std::pair<Symbol,int> a, std::pair<Symbol,int> b)
 {
   return a.second<b.second;
@@ -913,13 +921,18 @@ void CgenClassTable::emit_dispatchTable()
 {
   for(unsigned i=0;i<ordered_class.size();i++)
   {
+    //Emitting Dispatch Table for each class
     str<< ordered_class[i]->get_name()<< "_dispTab"<<LABEL;
+
+    //Taking the method list for the present class
     std::map< Symbol,std::pair<Symbol,int> > method_list = dispatchTable.find(ordered_class[i]->get_name())->second;
-    std::vector< std::pair<Symbol,int> > ordered_dispatch;
+    std::vector< std::pair<Symbol,int> > ordered_dispatch;  //Vector for sorting in the order of offsets.
+    
     for(std::map<Symbol,std::pair<Symbol,int> >::iterator it = method_list.begin();it!=method_list.end();it++)
     {
       ordered_dispatch.push_back(std::pair<Symbol,int>(it->first,(it->second).second));
     }
+
     /*For emmitting in the order of their offsets in the map*/
     std::sort(ordered_dispatch.begin(),ordered_dispatch.end(),compare);
     for(unsigned i = 0; i<ordered_dispatch.size();i++)
@@ -940,17 +953,19 @@ void CgenClassTable::code_dispatchTable()
     populate_dispachTable(ordered_class[i],ordered_class[i]);
   }
 
+  //emmiting dispatch Tables.
   emit_dispatchTable();
 }
 /*Populating attributes for each class starting from ancestor to successor*/
 void CgenClassTable::populate_attrTable(CgenNodeP node, CgenNodeP cur_class)
 {
+  //First populate attributes of the parent class
   if(node->get_name()!=Object)
   {
     populate_attrTable(node->get_parentnd(),cur_class);
   }
-  Features f = node->features;
 
+  Features f = node->features;
   for(int i = f->first();f->more(i); i=f->next(i))
   {
     /*Verifying if the feature is an attribute*/
@@ -1026,11 +1041,13 @@ void CgenClassTable::code_init_classes()
 		Symbol classname = cur_class->get_name();
 		cur_classname = classname;
 		str<<classname<<CLASSINIT_SUFFIX<<LABEL;
-	  emit_push(FP, str);
-	  emit_push(SELF, str);
-	  emit_push(RA, str);
+
+    //Emmiting code for initializing the activation record
+	  emit_push(FP, str);    //Pushing Frame pointer
+	  emit_push(SELF, str);   //Pushing the self pointer
+	  emit_push(RA, str);      //Pushing the return address
  	 	emit_addiu(FP,SP,4,str); // set $fp to a new position
-  	emit_move(SELF,ACC,str);
+  	emit_move(SELF,ACC,str); 
 		//Initializing parent classes
 		if(classname!=Object)
 		{
@@ -1040,7 +1057,7 @@ void CgenClassTable::code_init_classes()
 		Features fs = cur_class->features;
 		for(int i = fs->first(); fs->more(i); i= fs->next(i))
 		{
-		//Code generation for init expressions
+		  //Code generation for init expressions
 			attr_class *attribute = dynamic_cast<attr_class *>(fs->nth(i));
 			if(attribute!=NULL){
 				Expression assigned = attribute->init;
@@ -1064,8 +1081,8 @@ void CgenClassTable::code_init_classes()
 	  emit_return(str);	
 	}	
 }
-/*Modified Code ends Here*/
 
+//Emmitting code for each methods for every classes except the Basic classes
 void CgenClassTable::emit_methods()
 {
 	for(unsigned i = 0; i<ordered_class.size();i++)
@@ -1085,8 +1102,9 @@ void CgenClassTable::emit_methods()
 					Formals formals = method->formals;
 
           formalScope.clear();
+          //Storing the offsets from the frame pointer of the formals for use in method body. 
 					for(int k = formals->first();formals->more(k);k=formals->next(k)){
-            if(cgen_debug) cout<<k<<endl;
+            //if(cgen_debug) cout<<k<<endl;
             formal_class *formal = dynamic_cast<formal_class *>(formals->nth(k));
             if(formal!=NULL){
 					 	  formalScope.push_back(formal->name);
@@ -1095,14 +1113,18 @@ void CgenClassTable::emit_methods()
           }
 
 					str<< ordered_class[i]->get_name() << METHOD_SEP << method->name << LABEL;
-					emit_addiu(SP,SP,-12,str);
+					//Initializing frame pointer and storing  previous frame pointer and return address 
+          emit_addiu(SP,SP,-12,str);
 		      emit_store(FP,3,SP,str);
 		      emit_store(SELF,2,SP,str);
 		      emit_store(RA,1,SP,str);
 		      emit_addiu(FP,SP,4,str);
 		      emit_move(SELF,ACC,str);
+
 					body->code(str);						//emit code for the body expression
-					emit_load(FP,3,SP,str);
+					
+          //Poping frame pointer and return address and self pointer
+          emit_load(FP,3,SP,str);
 		      emit_load(SELF,2,SP,str);
 		      emit_load(RA,1,SP,str);
 		      emit_addiu(SP,SP,count* 4 + 12,str); // number of arguments + 12
@@ -1192,14 +1214,14 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 //*****************************************************************
 
 void assign_class::code(ostream &s) {
-  int off;
-  expr->code(s);
-  if(letScope.size()!=0){
+  int off;    //Offset for refering the variable
+  expr->code(s);    //emmitting code for the initializing expression
+  if(letScope.size()!=0){ //First check the scope from the let expressions if any
     for(int i = letScope.size()-1;i>=0;i--)
     {
       if(letScope[i]==name)
       {
-
+        //The variable from the innermost scope will be referred
         if(cgen_debug) cout<<"Variable refrenced from Let\n";
         off = letScope.size()-i;
         emit_store(ACC,off,SP,s);
@@ -1207,6 +1229,7 @@ void assign_class::code(ostream &s) {
       }
     }
   }
+  //Then check whether the variable is defined in the formals
   if(formalScope.size()!=0)
   {
     for(unsigned i = 0;i<formalScope.size();i++)
@@ -1221,63 +1244,68 @@ void assign_class::code(ostream &s) {
     }
   }
 
+  //otherwise search from the attribute table the correct location
   off = (attrTable.find(cur_classname)->second).find(name)->second.second;
   emit_store(ACC,off+3,SELF,s);
 }
 
+//Emmitting code for static dispatch expression
 void static_dispatch_class::code(ostream &s) {
-  int num_of_actuals = 0;
-  int not_void = label_count;
-  int offset;
-  Symbol class_type = type_name;
+  int num_of_actuals = 0; //For maintianing the offsets of the let Variables
+  int not_void = label_count; // Label if the method is not on void
+  int offset;       //Offset for the method in the dispatch table
+  Symbol class_type = type_name; 
   if(class_type==SELF_TYPE)
     class_type = cur_classname;
 
+  //Generating the label for the dispatch table
   char *disp1 = class_type->get_string();
   char dispAddress[500];
   strcpy(dispAddress,disp1);
   strcat(dispAddress,"_dispTab");
   label_count++;
 
-
+  //Code each actuals from  start
   for(int i=actual->first();actual->more(i);i=actual->next(i))
   {
     num_of_actuals++;
     actual->nth(i)->code(s);
-    letScope.push_back(No_type);
+    letScope.push_back(No_type);  //For maintaing the offsets of letVariables 
     emit_push(ACC,s);
   }
   
-
+  //Coding the left hand side expression
   expr->code(s);
   
-
+  //If the expression is on void or not
   emit_bne(ACC,ZERO,not_void,s);
   emit_load_address(ACC,"str_const0",s);
   emit_load_imm(T1,1,s);
   emit_jal("_dispatch_abort",s);
 
+  //If the dispach is not on void
   emit_label_def(not_void,s);
   emit_load_address(T1,dispAddress,s);
   offset = (dispatchTable.find(class_type)->second).find(name)->second.second;
   emit_load(T1,offset,T1,s);
   emit_jalr(T1,s);
 
+  //Pop from the letscope to maintain the offset of let variables.
   for(int i = 0; i<num_of_actuals;i++)
     letScope.pop_back();
-
-
-
 }
 
+//Emmitting code for disoatch expression
 void dispatch_class::code(ostream &s) {
-  int num_of_actuals = 0;
-  int not_void = label_count;
-  int offset;
+  int num_of_actuals = 0; //Number of actuals as a helper for maintaing the letscopes
+  int not_void = label_count;   //if not on void then branch to this label
+  int offset;                   //Offset to find the correct method
   Symbol expr_type = expr->get_type();
   if(expr_type==SELF_TYPE)
     expr_type = cur_classname;
   label_count++;
+
+  //Code each actuals then push to the stack
   for(int i=actual->first();actual->more(i);i=actual->next(i))
   {
     num_of_actuals++;
@@ -1285,33 +1313,43 @@ void dispatch_class::code(ostream &s) {
     letScope.push_back(No_type);
     emit_push(ACC,s);
   }
+
+  //Codeing the left hand side expression
   expr->code(s);
+
+  //If the dispatch on void or not
   emit_bne(ACC,ZERO,not_void,s);
   emit_load_address(ACC,"str_const0",s);
   emit_load_imm(T1,1,s);
   emit_jal("_dispatch_abort",s);
 
+  //If the dispatch is not on void
   emit_label_def(not_void,s);
   emit_load(T1,2,ACC,s);
   offset = (dispatchTable.find(expr_type)->second).find(name)->second.second;
   emit_load(T1,offset,T1,s);
   emit_jalr(T1,s);
 
+  //Pop all the unnecessary actuals after the need is over
   for(int i = 0; i<num_of_actuals;i++)
     letScope.pop_back();
 }
 
+//Emmiting code for if-then else fi  expression
 void cond_class::code(ostream &s) {
-  int truelabel = label_count;
+  int truelabel = label_count;    //Truelabel: Jump if the predicate evaluates to true
   label_count++;
-  int falselabel = label_count++;
-  pred->code(s);
-  emit_fetch_int(T1,ACC,s);
+  int falselabel = label_count;   //False label: Jump if the predicate is false
+  label_count++;
+
+  pred->code(s);                  //Code the predicate to fetch its value
+
+  emit_fetch_int(T1,ACC,s);       //Fetch the value from the correct location
   emit_beqz(T1,falselabel,s);
-  then_exp->code(s);
+  then_exp->code(s);              //If true
   emit_branch(truelabel,s);
-  emit_label_def(falselabel,s);
-  else_exp->code(s);
+  emit_label_def(falselabel,s);   
+  else_exp->code(s);              //If false
   emit_label_def(truelabel,s);
 }
 
@@ -1320,20 +1358,24 @@ void loop_class::code(ostream &s) {
 	label_count++;
 	int falselabel = label_count;
 	label_count++;
+
+  //True branch
 	emit_label_def(truelabel,s);
 	pred->code(s);
-	emit_load(T1,3,ACC,s);
-	emit_beqz(T1,falselabel,s);
+  emit_load(T1,3,ACC,s);
+	emit_beqz(T1,falselabel,s);  //Exit the while loop if false
 	body->code(s);
-	emit_branch(truelabel,s);
-	emit_label_def(falselabel,s);
-  emit_move(ACC,ZERO,s);
+	emit_branch(truelabel,s);    //Continue the while loop
+	
+  emit_label_def(falselabel,s);
+  emit_move(ACC,ZERO,s);      //Put the value zero to the accumulator as the evaluted value is always zero
 }
 
 void typcase_class::code(ostream &s) {
 }
 
 void block_class::code(ostream &s) {
+  //Code each expression
 	for(int i = body->first(); body->more(i); i = body->next(i))
 	{
 		body->nth(i)->code(s);
@@ -1341,7 +1383,7 @@ void block_class::code(ostream &s) {
 }
 
 void let_class::code(ostream &s) {
-
+  //If there is no initialization then put the default values in the accumulator
   if(init->get_type() == NULL)
   {
     if(type_decl == Int)
@@ -1353,28 +1395,37 @@ void let_class::code(ostream &s) {
     else
       emit_load_imm(ACC,0,s);
   }
+
   else
   {
+    //Else code the initialization expression
   	if(cgen_debug) cout<<"Let has an assignment" <<endl;
     init->code(s);
   }
-  letScope.push_back(identifier);
+
+  //Push the variable onto the stack for future reference inside the stack
+  letScope.push_back(identifier);     //For maintiang the offset for referencing from the stack
   emit_push(ACC,s);
-  body->code(s);
-  emit_addiu(SP,SP,4,s);
-  letScope.pop_back();
-
-
+  body->code(s);      //Code the body of let expression 
+  emit_addiu(SP,SP,4,s);      //pop the variable since it is not needed and should not be accessed
+  letScope.pop_back();      //Not needing outside its body
 }
 
+/*
+The following is the logic for all the binary arithmetic operators
+1. Evaluate the left expression and push onto the stack
+2. Evaluate the right hand side and move the value to a temporary register
+3. allocate some space for the current expression
+4. Do the corresponding operation
+*/
 void plus_class::code(ostream &s) {
-	e1->code(s);
+	e1->code(s); 
   letScope.push_back(No_type);
-  emit_push(ACC,s);
-	e2->code(s);
-  emit_fetch_int(T2,ACC,s);
+  emit_push(ACC,s);  
+	e2->code(s);       
+  emit_fetch_int(T2,ACC,s); 
   emit_jal("Object.copy",s);
-	emit_pop(T1,s);
+	emit_pop(T1,s);        
   emit_fetch_int(T1,T1,s);
   emit_add(T1,T1,T2,s);
   emit_store_int(T1,ACC,s);
@@ -1423,6 +1474,9 @@ void divide_class::code(ostream &s) {
   letScope.pop_back();
 }
 
+//Take the current value of the object in a temporary register
+//Allocate some space from the heap for the new object
+//And negate the value of the register and put it back in the correct loaction
 void neg_class::code(ostream &s) {
 	e1->code(s);
 	emit_push(ACC,s);
@@ -1435,6 +1489,12 @@ void neg_class::code(ostream &s) {
   emit_store_int(T2,ACC,s);	
 }
 
+/*The follwoing is the login for less than and less than equal to expressions
+1. Evaluate the left expression and push onto the stack
+2. Evaluates the second expression and retreive it  value.
+3. Retreive the value of the left expression from the stack
+4. Compare and branch
+*/
 void lt_class::code(ostream &s) {
   int truelabel = label_count;
   label_count++;
@@ -1452,6 +1512,10 @@ void lt_class::code(ostream &s) {
   emit_label_def(truelabel,s);
 }
 
+
+//For the equal first check if the they point to the same locations
+// If they are not pointing to the same location then check if they are of basic tyoes
+//If they are then call equality_test else return false as the result
 void eq_class::code(ostream &s) {
   int truelabel = label_count;
   label_count++;
@@ -1465,6 +1529,7 @@ void eq_class::code(ostream &s) {
   emit_load_bool(ACC,truebool,s);
   emit_beq(T2,T1,truelabel,s);
   Symbol expr = e1->get_type();
+  emit_load_bool(ACC,falsebool,s);
   if(expr == Int || expr == Bool || expr == Str )
   {
     emit_load_bool(ACC,truebool,s);
@@ -1492,6 +1557,7 @@ void leq_class::code(ostream &s) {
   emit_label_def(truelabel,s);
 }
 
+//For complement class first check if the value is zero. And put the reverse value in the accumulator 
 void comp_class::code(ostream &s) {
   int truelabel = label_count;
   label_count++;
@@ -1521,6 +1587,10 @@ void bool_const_class::code(ostream& s)
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
+//There are three lines of code for the new 
+//First put the pointer of the proto type object of the type to the accumulator 
+//Then call Object.copy for allocating space
+//Then call the init function of that class
 void new__class::code(ostream &s) {
   if(type_name == SELF_TYPE){}
   else{
@@ -1529,14 +1599,17 @@ void new__class::code(ostream &s) {
   char init[500] = "";
   strcpy(proto,classname);
   strcpy(init,classname);
-  strcat(proto,PROTOBJ_SUFFIX);
-  strcat(init,CLASSINIT_SUFFIX);
+  strcat(proto,"_protObj");
+  strcat(init,"_init");
   emit_load_address(ACC,proto,s);
   emit_jal("Object.copy",s);
   emit_jal(init,s);
   }  
 }
 
+//First evalute the expression.
+//Then check whether it points to the correct location
+//If it points then put true else false
 void isvoid_class::code(ostream &s) {
   int truelabel = label_count;
   label_count++;
@@ -1554,6 +1627,9 @@ void isvoid_class::code(ostream &s) {
 void no_expr_class::code(ostream &s) {
 }
 
+//If the object is self then put the pointer of the current class prototype as the result
+//Else check in the let scope for that variable, then check in the formal paramters then 
+//for attributes and load the correct address 
 void object_class::code(ostream &s) {
   int off;
   if(name == self)
@@ -1581,14 +1657,12 @@ void object_class::code(ostream &s) {
     {
       if(formalScope[i] == name)
       {
-        if(cgen_debug) cout<<"Variable refrenced from Formal Arguments\n";
         off = formalScope.size()-i-1;
-        emit_load(ACC,off+3,FP,s);
+        emit_load(ACC,off,FP,s);
         return;
       }
     }
   }
-
   off = (attrTable.find(cur_classname)->second).find(name)->second.second;
   emit_load(ACC,off+3,SELF,s);
 }
